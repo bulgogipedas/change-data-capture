@@ -1,5 +1,7 @@
 # Operations Runbook
 
+For a clean presenter flow, use `docs/demo-runbook.md`. This file is the shorter operator reference.
+
 ## Happy Path
 
 ```bash
@@ -103,3 +105,10 @@ docker compose -f compose.yml config
 docker compose -f compose.yml up -d
 docker compose -f compose.yml ps
 ```
+
+## Related Docs
+
+- `docs/demo-story.md`: presenter script and business incident narrative.
+- `docs/demo-runbook.md`: clean reset/replay flow.
+- `docs/screenshots.md`: screenshot capture checklist.
+- `docs/interview-notes.md`: technical talking points and expected questions.

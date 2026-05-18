@@ -1,215 +1,260 @@
 # Real-Time Order & Inventory CDC Platform
 
-A CDC-powered e-commerce analytics platform that turns PostgreSQL row changes into real-time inventory, order, payment, seller, and pipeline health dashboards.
+A portfolio-grade data engineering project that captures operational changes from PostgreSQL with Debezium, streams them through Redpanda, processes them incrementally with Python, serves analytical state in ClickHouse, and presents fresh order, payment, refund, seller, inventory, and pipeline health metrics in Streamlit.
 
-## Problem
+## Project Overview
 
-Modern commerce teams often make decisions from stale data. Inventory says a product is available after it has already sold out, seller dashboards lag behind orders, payment/refund status arrives late, and analytics teams burn compute on full-refresh jobs.
+Modern e-commerce companies often have one operational database but many downstream views of the business: seller dashboards, inventory monitoring, finance reports, analytics marts, product availability, and executive dashboards. When those systems depend on hourly batch ETL, they drift away from the source of truth.
 
-This project demonstrates a practical alternative: use Change Data Capture to stream inserts, updates, and deletes from PostgreSQL into Redpanda, process the changes incrementally, and serve fresh operational analytics from ClickHouse.
+This project shows how Change Data Capture solves that problem. Every insert, update, and delete in PostgreSQL becomes an event. Those events flow through Redpanda, are normalized by a Python processor, and land in ClickHouse tables designed for near real-time analytics.
 
-## Business Scenario
+The demo company is **ShopPulse**, a marketplace running a flash sale. During the sale, orders spike, inventory falls quickly, payments change status, and refunds/cancellations happen. The dashboard updates from CDC events instead of waiting for the next batch refresh.
 
-The demo company, ShopPulse, is running a flash sale. Orders spike, inventory drops quickly, some payments move from `PENDING` to `SUCCESS`, and a few orders are cancelled or refunded. The CDC platform shows those changes within seconds while a simulated hourly batch snapshot remains stale.
+## Why This Problem Matters
+
+In a real commerce operation, stale data creates visible business damage:
+
+- Customers see stock as available, then checkout fails.
+- Sellers see outdated revenue and order counts.
+- Operations teams miss low-stock incidents.
+- Finance teams wait for payment and refund updates.
+- Analytics teams run expensive full-refresh jobs to answer questions that only need incremental changes.
+- Product/search systems can keep showing inactive or out-of-stock products.
+
+CDC is valuable because it captures what changed, when it changed, and in what order. That makes downstream systems fresher, cheaper to update, easier to audit, and easier to replay.
+
+## Business Impact
+
+| Business area | Batch ETL pain | CDC outcome |
+|---|---|---|
+| Inventory | Stock dashboards lag behind real sales | Low-stock products surface within seconds |
+| Seller operations | Sellers wait for updated orders and revenue | Seller performance reflects current transactions |
+| Finance | Payment/refund status arrives late | Payment monitoring tracks status transitions |
+| Analytics | Full refreshes scan unchanged data | Incremental updates reduce repeated work |
+| Operations | Incident response is delayed | Teams see freshness and pipeline health |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    A["PostgreSQL Operational DB"] -->|WAL| B["Debezium Connect"]
-    B --> C["Redpanda / Kafka Topics"]
-    C --> D["Python CDC Stream Processor"]
-    D --> E["ClickHouse Raw CDC Tables"]
-    D --> F["ClickHouse Current-State Tables"]
-    F --> G["ClickHouse Views / Marts"]
-    G --> H["Streamlit Dashboard"]
-    I["Demo Simulation Scripts"] --> A
-    J["Data Quality Runner"] --> A
-    J --> F
-    J --> K["DQ Results / Pipeline Health"]
-    D --> K
-    C --> L["Redpanda Console"]
-    K --> H
+    S["Demo scripts"] -->|insert/update/delete| P["PostgreSQL source DB"]
+    P -->|WAL / logical replication| D["Debezium Connect"]
+    D -->|CDC topics| R["Redpanda"]
+    R -->|consume Debezium envelopes| C["Python CDC processor"]
+    C --> RAW["ClickHouse raw_cdc_events"]
+    C --> CUR["ClickHouse current-state tables"]
+    CUR --> MART["ClickHouse facts, dimensions, marts"]
+    MART --> UI["Streamlit dashboard"]
+    Q["Data quality checks"] --> MART
+    Q --> HEALTH["DQ and pipeline health tables"]
+    C --> HEALTH
+    R -. observed in .-> RC["Redpanda Console"]
+    UI --> HEALTH
 ```
 
 ## Tech Stack
 
-- PostgreSQL for transactional source data
-- Debezium for WAL-based CDC
-- Redpanda for Kafka-compatible streaming
-- Python for the MVP stream processor and demo scripts
-- ClickHouse for analytical serving
-- Streamlit for the local dashboard
-- Custom SQL/Python quality checks for MVP trust signals
-- Redpanda Console plus ClickHouse health tables for observability
+| Layer | Tool | Role |
+|---|---|---|
+| Source database | PostgreSQL | Transactional e-commerce data |
+| CDC | Debezium | Reads PostgreSQL WAL and emits row-level changes |
+| Streaming | Redpanda | Kafka-compatible event backbone |
+| Processing | Python | Parses Debezium events and writes ClickHouse |
+| Analytics | ClickHouse | Low-latency analytical tables and marts |
+| Dashboard | Streamlit | Demo interface for business and pipeline views |
+| Data quality | Python SQL checks | Validates warehouse and mart assumptions |
+| Runtime | Podman Compose | Local reproducible service stack |
 
-## Local Ports
+## Data Flow
 
-| Service | Port |
-|---|---:|
-| PostgreSQL | 5432 |
-| Debezium Connect | 8083 |
-| Redpanda broker | 9092 |
-| Redpanda admin | 9644 |
-| Redpanda Console | 8080 |
-| ClickHouse HTTP | 8123 |
-| ClickHouse native | 9000 |
-| Streamlit | 8501 |
+1. PostgreSQL stores transactional entities: customers, sellers, products, inventory, orders, payments, shipments, refunds, and stock movements.
+2. Debezium snapshots the source tables, then streams `INSERT`, `UPDATE`, and `DELETE` changes from PostgreSQL WAL.
+3. Redpanda stores one CDC topic per source table, for example `dbserver1.public.orders`.
+4. The Python processor consumes Debezium envelopes, extracts `before`, `after`, `op`, source timestamps, topic, partition, and offset metadata.
+5. ClickHouse stores raw CDC events for audit/replay and current-state rows using immutable inserts with versioned replacement.
+6. ClickHouse views expose facts, dimensions, and marts for dashboards.
+7. Streamlit reads ClickHouse and shows near real-time operational analytics.
+
+## Dashboard Pages
+
+| Page | What it shows | Demo purpose |
+|---|---|---|
+| Executive overview | GMV, total orders, successful payments, cancellations, refunds, active sellers | Business summary during the incident |
+| Real-time inventory | Low-stock products, out-of-stock products, stock movement timeline | Shows inventory changing from sales and adjustments |
+| Seller operations | Seller revenue, orders, cancellations, top products | Shows seller-facing operational freshness |
+| Payment monitoring | Pending, successful, failed, and refunded payments | Shows payment status transitions |
+| CDC pipeline health | Event counts, freshness, failed records, DQ results | Shows trust and observability of the pipeline |
+
+## Demo Scenario
+
+The demo is a flash sale incident:
+
+1. Start with baseline inventory and order metrics.
+2. Run a flash sale script that inserts a new order, order item, pending payment, inventory update, and stock movement.
+3. Show Debezium events appearing in Redpanda topics.
+4. Show the Python processor writing raw and current-state events to ClickHouse.
+5. Refresh Streamlit and show order count, inventory, and pipeline freshness moving.
+6. Mark a payment as successful.
+7. Force a low-stock adjustment.
+8. Cancel/refund an order.
+9. Demonstrate physical delete handling with a shipment insert/delete.
+10. Run data quality checks and show all checks passing.
+
+The key contrast: an hourly batch ETL dashboard would still show the old stock and payment state, while this CDC pipeline reflects the incident as it happens.
 
 ## Run Locally
 
-1. Copy environment defaults:
+Prerequisites:
 
-   ```bash
-   cp .env.example .env
-   ```
+- Podman and Podman Compose
+- `uv`
+- `curl`
 
-2. Start the container runtime.
-
-   Podman:
-
-   ```bash
-   podman machine start
-   podman info
-   ```
-
-   Docker alternative:
-
-   ```bash
-   docker info
-   ```
-
-3. Start infrastructure:
-
-   ```bash
-   podman compose up -d postgres redpanda clickhouse debezium redpanda-console
-   ```
-
-   Docker alternative:
-
-   ```bash
-   docker compose up -d postgres redpanda clickhouse debezium redpanda-console
-   ```
-
-4. Check service health:
-
-   ```bash
-   podman compose ps
-   curl -fsS http://localhost:8123/ping
-   curl -fsS http://localhost:8083/connectors
-   podman exec cdc-postgres pg_isready -U cdc_user -d shopdb
-   podman exec cdc-redpanda rpk cluster health
-   ```
-
-5. Register the Debezium connector:
-
-   ```bash
-   ./scripts/register_connector.sh
-   ```
-
-6. Confirm topics were created:
-
-   ```bash
-   ./scripts/create_topics.sh
-   podman exec cdc-redpanda rpk topic list
-   ```
-
-7. Start the CDC processor in a dedicated terminal:
-
-   ```bash
-   cd stream_processor
-   uv run python -m src.main
-   ```
-
-8. Start the dashboard in another terminal:
-
-   ```bash
-   cd dashboard
-   uv run streamlit run app.py
-   ```
-
-9. Run a demo simulation from the repo root:
-
-   ```bash
-   uv run --project scripts python scripts/simulate_flash_sale.py
-   uv run --project scripts python scripts/simulate_payment_updates.py
-   uv run --project scripts python scripts/simulate_inventory_changes.py
-   uv run --project scripts python scripts/simulate_refunds_and_cancellations.py
-   uv run --project scripts python scripts/simulate_delete_handling.py
-   ```
-
-   Confirm ClickHouse received CDC events:
-
-   ```bash
-   curl -sS "http://localhost:8123/?database=cdc_analytics" --data-binary "SELECT source_table, count() FROM raw_cdc_events GROUP BY source_table ORDER BY source_table"
-   ```
-
-10. Run data quality checks:
-
-   ```bash
-   cd stream_processor
-   uv run python -m src.quality.run_checks
-   ```
-
-## Troubleshooting Podman
-
-If `podman machine start` reports success but `podman machine inspect` still shows `State: "stopped"`, the problem is the local Podman VM/socket, not the project compose file.
-
-Try:
+From the repo root:
 
 ```bash
-podman machine stop
-podman machine start
-podman machine inspect
-podman info
-```
-
-If the socket still fails with `connection refused` or `operation not permitted`, recreate the VM:
-
-```bash
-podman machine stop
-podman machine rm
-podman machine init --cpus 4 --memory 4096 --disk-size 100
+cp .env.example .env
 podman machine start
 podman info
+podman compose -f compose.yml config
+podman compose -f compose.yml up -d
+podman compose -f compose.yml ps
 ```
 
-If Podman remains blocked, use Docker Desktop:
+Register CDC and ensure all topics exist:
 
 ```bash
-docker compose -f compose.yml config
-docker compose -f compose.yml up -d
-docker compose -f compose.yml ps
+./scripts/register_connector.sh
+./scripts/create_topics.sh
+podman exec cdc-redpanda rpk topic list
+curl -sS http://localhost:8083/connectors/shop-postgres-source/status
 ```
 
-## Demo Flow
+Start the CDC processor in a dedicated terminal:
 
-1. Open Streamlit at `http://localhost:8501`.
-2. Open Redpanda Console at `http://localhost:8080`.
-3. Show baseline GMV, orders, inventory, payments, and freshness.
-4. Run the flash sale script.
-5. Watch order count and GMV increase.
-6. Watch inventory decrease and low-stock products appear.
-7. Update payments from `PENDING` to `SUCCESS`.
-8. Cancel/refund an order and show revenue adjustments.
-9. Inspect raw CDC events in Redpanda Console.
-10. Run the delete handling script and show the downstream `is_deleted = 1` row version.
-11. Show ClickHouse current-state and pipeline health queries.
+```bash
+cd stream_processor
+uv run python -m src.main
+```
 
-## What This Demonstrates
+Start the dashboard in another terminal:
 
-- PostgreSQL WAL capture with Debezium
-- Kafka-compatible CDC topics in Redpanda
-- Debezium snapshot, insert, update, delete, and tombstone handling
-- Idempotent analytical state using ClickHouse immutable inserts
-- Real-time dashboard freshness and pipeline health
-- Data quality checks for business-critical metrics
+```bash
+cd dashboard
+uv run streamlit run app.py
+```
+
+Open:
+
+- Streamlit dashboard: `http://localhost:8501`
+- Redpanda Console: `http://localhost:8080`
+- Debezium REST: `http://localhost:8083/connectors`
+- ClickHouse HTTP playground: `http://localhost:8123/play`
+
+## Demo Commands
+
+Run these from the repo root while the processor is running:
+
+```bash
+uv run --project scripts python scripts/simulate_flash_sale.py
+uv run --project scripts python scripts/simulate_payment_updates.py
+uv run --project scripts python scripts/simulate_inventory_changes.py
+uv run --project scripts python scripts/simulate_refunds_and_cancellations.py
+uv run --project scripts python scripts/simulate_delete_handling.py
+```
+
+Run data quality checks:
+
+```bash
+cd stream_processor
+uv run python -m src.quality.run_checks
+```
+
+## Health Checks
+
+```bash
+podman compose -f compose.yml ps
+podman exec cdc-postgres pg_isready -U cdc_user -d shopdb
+podman exec cdc-redpanda rpk cluster health
+curl -fsS http://localhost:8083/connectors
+curl -fsS http://localhost:8123/ping
+podman exec cdc-redpanda rpk topic list
+```
+
+Verify events in ClickHouse:
+
+```bash
+curl -sS "http://localhost:8123/?database=cdc_analytics" \
+  --data-binary "SELECT source_table, count() FROM raw_cdc_events GROUP BY source_table ORDER BY source_table"
+```
+
+Verify executive mart:
+
+```bash
+curl -sS "http://localhost:8123/?database=cdc_analytics" \
+  --data-binary "SELECT * FROM mart_executive_overview FORMAT PrettyCompact"
+```
+
+## Data Quality Checks
+
+The MVP includes custom SQL checks for:
+
+- Non-negative order totals.
+- Non-negative inventory quantity.
+- Successful payments requiring `paid_at`.
+- Non-zero stock movement quantity.
+- Cancelled paid orders being visible for revenue adjustment review.
+
+The checks write results to `data_quality_results`, which is visible on the CDC pipeline health dashboard.
+
+## Screenshots
+
+Recommended screenshots live under `docs/screenshots.md`. Suggested output folder:
+
+```text
+docs/assets/screenshots/
+```
+
+Capture:
+
+- Executive overview after the full demo.
+- Real-time inventory with at least one low-stock product.
+- Payment monitoring after payment/refund updates.
+- CDC pipeline health with raw event counts and DQ results.
+- Redpanda Console topic list.
+- Debezium connector `RUNNING` status.
+- ClickHouse query output for `raw_cdc_events`.
+
+## Known Limitations
+
+This is intentionally an MVP, not a production platform:
+
+- The processor is a Python consumer, not Flink or Kafka Streams.
+- Exactly-once semantics are not implemented.
+- Schema evolution is documented but not automated.
+- Consumer lag is mostly inspected through Redpanda tools, not pushed to a metrics backend.
+- The dashboard refresh is manual/page-driven rather than live websocket streaming.
+- Reset/replay is manual and documented, not orchestrated.
+- Secrets are local demo defaults, not production-grade secret management.
 
 ## Future Improvements
 
-- Replace or augment Python processing with Flink
-- Add dbt models for stronger dimensional modeling
-- Add Dagster or Airflow for replay, backfills, and quality schedules
-- Add Schema Registry and compatibility rules
-- Add Prometheus/Grafana metrics
-- Add CI/CD and cloud deployment
+- Replace or augment the Python processor with Flink for stateful/event-time processing.
+- Add dbt models for stronger staging, facts, dimensions, and marts.
+- Add a dead-letter queue and replay tooling.
+- Add Schema Registry and compatibility checks.
+- Add Dagster or Airflow for backfills and scheduled quality checks.
+- Add Prometheus/Grafana for operational metrics.
+- Add CI checks for Python, SQL, Compose config, and documentation.
+- Deploy a cloud version with managed Postgres, Kafka-compatible streaming, and ClickHouse.
+
+## Interview Talking Points
+
+- CDC is better than hourly batch for operational analytics because it moves row-level changes continuously instead of repeatedly scanning unchanged tables.
+- Debezium reads PostgreSQL WAL and emits structured `before`/`after` envelopes with operation metadata.
+- Redpanda acts as the durable event log between capture and processing.
+- ClickHouse is a strong analytical serving layer because it handles high-volume inserts and fast aggregate queries.
+- Deletes are represented downstream with `is_deleted` and raw CDC payloads for auditability.
+- Idempotency is approached with Kafka topic/partition/offset metadata and ClickHouse versioned current-state tables.
+- Data quality is part of the demo because real-time data is only useful when teams can trust it.
+- The MVP trades production complexity for clarity: it is small enough to run locally but realistic enough to discuss production evolution.

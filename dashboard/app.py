@@ -144,7 +144,7 @@ def render_sellers() -> None:
         query_df(
             """
             SELECT p.product_name, p.category, s.seller_name, sum(oi.quantity) AS units_sold, sum(oi.line_total) AS ordered_amount
-            FROM cur_order_items FINAL oi
+            FROM (SELECT * FROM cur_order_items FINAL) AS oi
             LEFT JOIN dim_products p ON oi.product_id = p.product_id
             LEFT JOIN dim_sellers s ON p.seller_id = s.seller_id
             WHERE oi.is_deleted = 0
