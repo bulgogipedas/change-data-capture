@@ -1,0 +1,13 @@
+[project]
+name = "shop-cdc-stream-processor"
+version = "0.1.0"
+description = "Python CDC processor for the Real-Time Order & Inventory CDC Platform"
+requires-python = ">=3.11"
+dependencies = [
+  "clickhouse-connect>=0.8.0",
+  "confluent-kafka>=2.6.0",
+  "python-dotenv>=1.0.1",
+]
+
+[tool.uv]
+package = false
