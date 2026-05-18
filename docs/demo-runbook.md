@@ -28,6 +28,18 @@ podman rm -f cdc-postgres cdc-redpanda cdc-clickhouse cdc-debezium cdc-redpanda-
 
 ## Fresh Start
 
+Validate the project before starting containers:
+
+```bash
+./scripts/validate_project.sh
+```
+
+Expected result:
+
+```text
+Result: PASS
+```
+
 ```bash
 cp .env.example .env
 podman machine start
@@ -38,6 +50,14 @@ podman compose -f compose.yml ps
 ```
 
 ## Health Checks
+
+Quick check:
+
+```bash
+./scripts/check_demo_health.sh
+```
+
+Manual checks:
 
 ```bash
 podman exec cdc-postgres pg_isready -U cdc_user -d shopdb
@@ -96,7 +116,13 @@ http://localhost:8501
 
 ## Run Demo Scripts
 
-From the repo root:
+From the repo root, run the full sequence:
+
+```bash
+./scripts/run_demo_sequence.sh
+```
+
+Equivalent manual sequence:
 
 ```bash
 uv run --project scripts python scripts/simulate_flash_sale.py
@@ -173,6 +199,30 @@ Capture:
 - `08-data-quality-output.png`
 
 See `docs/screenshots.md` for the full screenshot checklist.
+
+## Helper Script Reference
+
+| Command | Use it when | Notes |
+|---|---|---|
+| `./scripts/validate_project.sh` | Before a demo or before pushing changes | Safe; does not start containers or mutate data |
+| `./scripts/check_demo_health.sh` | After services are up | Safe; reads service and ClickHouse state only |
+| `./scripts/run_demo_sequence.sh` | During the live demo | Mutates PostgreSQL demo data |
+| `make validate` | Same as validation script | Convenience wrapper |
+| `make health` | Same as health script | Convenience wrapper |
+| `make demo` | Same as demo sequence script | Convenience wrapper |
+| `make help` | Show all available helper commands | Useful before a live demo |
+
+## Troubleshooting Failed Validation
+
+- Python compile failure: inspect the file shown under the first `FAIL`.
+- Shell syntax failure: run `bash -n <script>` on the named script.
+- JSON failure: run `python3 -m json.tool debezium/connectors/postgres-source.json`.
+- YAML failure: inspect `compose.yml` indentation and quoting.
+- Podman warning: start the VM with `podman machine start`; validation still passes if this is only a warning.
+
+## CI Check
+
+The GitHub repository includes `.github/workflows/validate.yml`, which runs the static validation script on pushes and pull requests. This is a lightweight guardrail only; the full CDC stack still needs to be demo-tested locally with Podman.
 
 ## Stop Demo
 

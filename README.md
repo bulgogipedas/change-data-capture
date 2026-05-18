@@ -1,5 +1,7 @@
 # Real-Time Order & Inventory CDC Platform
 
+[![Validate MVP](https://github.com/bulgogipedas/change-data-capture/actions/workflows/validate.yml/badge.svg)](https://github.com/bulgogipedas/change-data-capture/actions/workflows/validate.yml)
+
 A portfolio-grade data engineering project that captures operational changes from PostgreSQL with Debezium, streams them through Redpanda, processes them incrementally with Python, serves analytical state in ClickHouse, and presents fresh order, payment, refund, seller, inventory, and pipeline health metrics in Streamlit.
 
 ## Project Overview
@@ -110,6 +112,12 @@ Prerequisites:
 - `uv`
 - `curl`
 
+Validate the project before starting services:
+
+```bash
+./scripts/validate_project.sh
+```
+
 From the repo root:
 
 ```bash
@@ -121,6 +129,15 @@ podman compose -f compose.yml up -d
 podman compose -f compose.yml ps
 ```
 
+The same commands are available through `make`:
+
+```bash
+make help
+make validate
+make up
+make ps
+```
+
 Register CDC and ensure all topics exist:
 
 ```bash
@@ -128,6 +145,13 @@ Register CDC and ensure all topics exist:
 ./scripts/create_topics.sh
 podman exec cdc-redpanda rpk topic list
 curl -sS http://localhost:8083/connectors/shop-postgres-source/status
+```
+
+Or:
+
+```bash
+make register-connector
+make create-topics
 ```
 
 Start the CDC processor in a dedicated terminal:
@@ -153,7 +177,19 @@ Open:
 
 ## Demo Commands
 
-Run these from the repo root while the processor is running:
+Run the full scripted demo sequence from the repo root while the processor is running:
+
+```bash
+./scripts/run_demo_sequence.sh
+```
+
+Or:
+
+```bash
+make demo
+```
+
+Equivalent manual commands:
 
 ```bash
 uv run --project scripts python scripts/simulate_flash_sale.py
@@ -170,7 +206,27 @@ cd stream_processor
 uv run python -m src.quality.run_checks
 ```
 
+Or:
+
+```bash
+make quality
+```
+
 ## Health Checks
+
+For a quick live demo health report:
+
+```bash
+./scripts/check_demo_health.sh
+```
+
+Or:
+
+```bash
+make health
+```
+
+Manual checks:
 
 ```bash
 podman compose -f compose.yml ps
@@ -206,6 +262,20 @@ The MVP includes custom SQL checks for:
 - Cancelled paid orders being visible for revenue adjustment review.
 
 The checks write results to `data_quality_results`, which is visible on the CDC pipeline health dashboard.
+
+## Helper Scripts
+
+| Script | Mutates data? | Purpose |
+|---|---:|---|
+| `scripts/validate_project.sh` | No | Static validation for Python syntax, shell syntax, connector JSON, compose YAML, required files, and executable permissions |
+| `scripts/check_demo_health.sh` | No | Runtime checks for PostgreSQL, Redpanda, Debezium, ClickHouse, topics, raw CDC counts, marts, and DQ summary |
+| `scripts/run_demo_sequence.sh` | Yes | Runs the flash sale, payment update, inventory update, refund/cancellation, and delete demo scripts in order |
+| `scripts/register_connector.sh` | Yes | Registers or updates the Debezium PostgreSQL connector |
+| `scripts/create_topics.sh` | Yes | Ensures expected Redpanda topics exist, including initially empty tables |
+
+If validation fails, read the first `FAIL` line and fix that before starting the stack. `WARN` lines are usually environment notes, such as `.env` missing or Podman not running.
+
+The repository also includes a small GitHub Actions workflow at `.github/workflows/validate.yml` that runs `scripts/validate_project.sh` on pushes and pull requests. It is intentionally static-only: it does not start containers or require local demo services.
 
 ## Screenshots
 

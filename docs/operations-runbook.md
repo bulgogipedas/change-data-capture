@@ -4,6 +4,12 @@ For a clean presenter flow, use `docs/demo-runbook.md`. This file is the shorter
 
 ## Happy Path
 
+Validate first:
+
+```bash
+./scripts/validate_project.sh
+```
+
 ```bash
 cp .env.example .env
 podman compose up -d postgres redpanda clickhouse debezium redpanda-console
@@ -29,6 +35,14 @@ Use Docker instead of Podman by replacing `podman compose` with `docker compose`
 
 ## Service Health
 
+Quick check:
+
+```bash
+./scripts/check_demo_health.sh
+```
+
+Manual checks:
+
 ```bash
 podman compose ps
 podman exec cdc-postgres pg_isready -U cdc_user -d shopdb
@@ -42,6 +56,15 @@ curl -sS "http://localhost:8123/?database=cdc_analytics" --data-binary "SELECT c
 The expected CDC topics are named like `dbserver1.public.orders`, `dbserver1.public.inventory`, and `dbserver1.public.payments`.
 
 ## Demo Commands
+
+Recommended:
+
+```bash
+./scripts/run_demo_sequence.sh
+cd stream_processor && uv run python -m src.quality.run_checks
+```
+
+Manual sequence:
 
 ```bash
 uv run --project scripts python scripts/simulate_flash_sale.py
@@ -58,6 +81,33 @@ cd stream_processor && uv run python -m src.quality.run_checks
 - Streamlit: `http://localhost:8501`
 - Debezium Connect: `http://localhost:8083/connectors`
 - ClickHouse: `http://localhost:8123/play`
+
+## Make Targets
+
+```bash
+make help
+make validate
+make up
+make ps
+make register-connector
+make create-topics
+make health
+make processor
+make dashboard
+make demo
+make quality
+make down
+```
+
+## CI Validation
+
+GitHub Actions runs the same static validation script on pushes and pull requests:
+
+```text
+.github/workflows/validate.yml
+```
+
+The workflow does not start containers. It checks project structure, Python syntax, shell syntax, Debezium JSON, and Compose YAML so broken demo code is caught before a live walkthrough.
 
 ## Reset
 
