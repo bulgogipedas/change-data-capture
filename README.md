@@ -87,6 +87,10 @@ flowchart LR
 | Payment monitoring | Pending, successful, failed, and refunded payments | Shows payment status transitions |
 | CDC pipeline health | Event counts, freshness, failed records, DQ results | Shows trust and observability of the pipeline |
 
+## Repository Structure
+
+See `docs/repository-structure.md` for the cleaned public file layout. The repository intentionally shows only implemented MVP components and portfolio docs; local-only operational runbooks are ignored by git.
+
 ## Demo Scenario
 
 The demo is a flash sale incident:
@@ -294,6 +298,18 @@ Capture:
 - Redpanda Console topic list.
 - Debezium connector `RUNNING` status.
 - ClickHouse query output for `raw_cdc_events`.
+
+## Public Documentation
+
+| Document | Purpose |
+|---|---|
+| `docs/architecture.md` | System architecture and data flow |
+| `docs/cdc-design.md` | CDC event handling strategy |
+| `docs/data-model.md` | Source and analytical model overview |
+| `docs/demo-story.md` | Presenter narrative for the flash sale demo |
+| `docs/interview-notes.md` | Interview-ready technical explanations |
+| `docs/screenshots.md` | Screenshot capture checklist |
+| `docs/repository-structure.md` | Clean public repository structure |
 
 ## Known Limitations
 

@@ -60,6 +60,7 @@ required_files=(
   compose.yml
   .env.example
   .github/workflows/validate.yml
+  docs/repository-structure.md
   debezium/connectors/postgres-source.json
   postgres/init/001_schema.sql
   clickhouse/init/001_raw_tables.sql
