@@ -216,6 +216,8 @@ Or:
 make quality
 ```
 
+For a step-by-step CDC proof, see `docs/cdc-check-walkthrough.md`. It walks through one source write from PostgreSQL to Redpanda, ClickHouse, and the Streamlit dashboard.
+
 ## Health Checks
 
 For a quick live demo health report:

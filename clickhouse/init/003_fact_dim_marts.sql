@@ -30,8 +30,8 @@ WHERE is_deleted = 0;
 
 CREATE VIEW IF NOT EXISTS cdc_analytics.mart_realtime_inventory AS
 SELECT
-    i.product_id,
-    p.seller_id,
+    i.product_id AS product_id,
+    p.seller_id AS seller_id,
     s.seller_name,
     p.sku,
     p.product_name,
@@ -41,8 +41,8 @@ SELECT
     i.low_stock_threshold,
     i.quantity_on_hand <= i.low_stock_threshold AS is_low_stock,
     i.quantity_on_hand = 0 AS is_out_of_stock,
-    i.updated_at,
-    i.ingested_at
+    i.updated_at AS updated_at,
+    i.ingested_at AS ingested_at
 FROM (SELECT * FROM cdc_analytics.cur_inventory FINAL) AS i
 LEFT JOIN (SELECT * FROM cdc_analytics.cur_products FINAL) AS p ON i.product_id = p.product_id
 LEFT JOIN (SELECT * FROM cdc_analytics.cur_sellers FINAL) AS s ON p.seller_id = s.seller_id
